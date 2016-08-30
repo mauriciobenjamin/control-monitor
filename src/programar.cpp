@@ -16,27 +16,23 @@
 #include <vector>
 #include <iterator>
 
+
 #define BOTON_PIN_ADC           A0  // A0 is the boton ADC input
 // ADC readings expected for the 5 botons on the ADC input
 #define DER_ADC            8  // derecha
-#define ARR_ADC          152  // up
-#define ABJ_ADC          334  // down
-#define IZQ_ADC          493  // left
-#define SELEC_ADC        700  // derecha
-#define HISTERESIS         5  // hysteresis for valid boton sensing window
+#define ARR_ADC          154  // up
+#define ABJ_ADC          338  // down
+#define IZQ_ADC          500  // left
+#define SELEC_ADC        708  // derecha
+#define HISTERESIS         7  // hysteresis for valid boton sensing window
 //return values for leerBotones()
-#define BOTON_NO        0 
-#define BOTON_DER       1 
-#define BOTON_DER_LAR   2
-#define BOTON_ARR       3 
-#define BOTON_ARR_LAR   4
-#define BOTON_ABJ       5  
-#define BOTON_ABJ_LAR   6
-#define BOTON_IZQ       7  
-#define BOTON_IZQ_LAR   8
-#define BOTON_SELEC     9 
-#define BOTON_SELEC_LAR 10
-
+const byte BOTON_NO        = 0;
+const byte BOTON_DER       = 1;
+const byte BOTON_ARR       = 2;
+const byte BOTON_ABJ       = 3;
+const byte BOTON_IZQ       = 4;
+const byte BOTON_SELEC     = 5;
+const int ESPERA = -1;
 #define tarjeta   4 // Pin para la tarjeta SD
 #define intMuestraMin 5  //Intervalo de muestreo en minutos
 #define intMuestraSec 00 //Intervalo de muestreo en segundos
@@ -76,25 +72,30 @@ public:
   };
   condiciones() {};
   void muestra(){
-    lcd.clear();
-    lcd.setCursor(0,0);
+    long dura = millis();
+    lcd.setCursor(0,1);
     lcd.print(humedad);
     lcd.print(" % HR ");
     lcd.print(temperatura);
     lcd.print("C ");
-    lcd.setCursor(0,1);
+    while (dura + 2000 > millis()) {
+    }
+    lcd.clear();
+    lcd.home();
     if(luz == 1) {
-      lcd.print("Luz activa.");
+      lcd.print("Luz");
     } else {
-      lcd.print("Luz apagada.");
+      lcd.print("No luz ");
     };
+    lcd.setCursor(7, 0);
     if(lluvia == 1) {
-      lcd.print("LLuvia activa.");
+      lcd.print("LLuvia");
     } else {
-      lcd.print("Lluvia apagada.");
+      lcd.print("No lluvia ");
     };
+    lcd.setCursor(0, 1);
     lcd.print("Duracion ");
-    lcd.print(duracion);
+    lcd.print(duracion); lcd.print(" min");
   };
 
   uint8_t usaH() {
@@ -122,14 +123,20 @@ public:
 /*--------------------------------------------------------------------------------------
 Variables
 --------------------------------------------------------------------------------------*/
-byte botonPresionado  = false;         //this will be true after a leerBotones() call if triggered
-byte botonLiberado = false;         //this will be true after a leerBotones() call if triggered
-byte botonEdo      = BOTON_NO;   //used by leerBotones() for detection of boton events
+
+//Variables del teclado
+byte botonPresionado  = false;
+byte botonLiberado = false;
+byte botonEdo   = BOTON_NO;
 byte botonEdoUlt = botonEdo;
-long ulTimer = 0;
-long retrasoBut = 100;
+uint voltAnt = BOTON_NO;
+uint botonVolt = BOTON_NO;
+long tiempoAnt = 0;
+const long tiempoRef = 100;
 long apretarLargo = 1000;
 bool largo = false;
+bool cambio = false;
+
 uint8_t etapas = 1;
 uint16_t luxes;
 uint16_t uv;
@@ -145,7 +152,6 @@ uint8_t mes = 8;
 uint8_t ano = 16;
 
 std::vector<condiciones> pasos;
-
 /*--------------------------------
 FUNCIONES
 ___________________________*/
@@ -167,9 +173,10 @@ void fijDia();
 void fijMes();
 void fijAno();
 void muestraTiempo();
+void muestra();
 void dosDigitos();
-uint8_t decrem();
-uint8_t increm();
+uint8_t decrem(uint8_t var, uint16_t limite, uint8_t max, uint8_t incremento);
+uint8_t increm(uint8_t var, uint16_t limite, uint8_t min, uint8_t incremento);
 // Cambiar para el feather
 
 /*-------
@@ -214,25 +221,24 @@ void setup()
 
 ////////////////////// Loop Principal  /////////////////////
 void loop() {
-while(leerBotones() != 0) {};
-lcd.clear();
-
-switch (opEstados) {
- case INICIO:
-   inicio();
-   break;
- case RELOJ:
-    reloj();
-    break;
- case PROGRAMAR:
-   programar();
-   break;
- case PARAMETROS:
-   parametros();
-   break;
- case CORRER:
-   programar();
-   break;
+  while(leerBotones() != 0) {};
+  lcd.clear();
+  switch (opEstados) {
+   case INICIO:
+     inicio();
+     break;
+   case RELOJ:
+      reloj();
+      break;
+   case PROGRAMAR:
+     programar();
+     break;
+   case PARAMETROS:
+     parametros();
+     break;
+   case CORRER:
+     programar();
+     break;
 }
 uint8_t botones = leerBotones();
 Serial.print(botones);
@@ -246,9 +252,8 @@ void inicio() {
   lcd.print("Presione derecha");
   lcd.setCursor(0,1);
   lcd.print("para iniciar");
-  while(!(botones & (BOTON_DER))) {
+  while(botones != BOTON_DER) {
    botones = leerBotones();
-   delay(200);
    }
    reloj();
 }
@@ -284,27 +289,24 @@ void muestraTiempo() {
     dosDigitos(d); lcd.print("/"); dosDigitos(me); lcd.print("/"); dosDigitos(a);
     botones = leerBotones();
     if (botones == BOTON_SELEC) {
-      delay(200);
       programar();
     }
     if (botones == BOTON_IZQ) {
-      delay(200);
       fijDia();
     }
     if (botones == BOTON_DER)
     {
-      delay(200);
       programar();
     }
   }
 }
 
-void dosDigitos(uint8_t time) {
-  if (time < 10) {
+void dosDigitos(uint8_t val) {
+  if (val < 10) {
     lcd.print("0");
-    lcd.print(time);
+    lcd.print(val);
   } else {
-    lcd.print(time);
+    lcd.print(val);
   }
 }
 
@@ -315,36 +317,25 @@ void fijHoras() {
     botones = leerBotones();
     uint8_t incremento = 1;
     if (botones == BOTON_SELEC) {
-      delay(200);
       rtc.setHours(h);
       horas = h;
       fijDia();
     }
     if (botones == BOTON_IZQ) {
-      delay(200);
       rtc.setHours(h);
       horas = h;
       inicio();
     }
     if (botones == BOTON_DER) {
-      delay(200);
       rtc.setHours(h);
       horas = h;
       fijMinutos();
     }
     if (botones == BOTON_ARR) {
-      h += incremento;
-      if( h > 23) {
-        h = 0;
-      }
-      delay(200);
+      h = increm(h, 23, 0, 1);
     }
     if (botones == BOTON_ABJ) {
-      h -= incremento;
-      if( h > 23) {
-        h = 23;
-      }
-      delay(200);
+      h = decrem(h, 0, 23, 1);
     }
     lcd.setCursor(2,1);
     dosDigitos(h);
@@ -358,36 +349,25 @@ void fijMinutos() {
     botones = leerBotones();
     uint8_t incremento = 1;
     if (botones == BOTON_SELEC) {
-      delay(200);
       rtc.setMinutes(m);
       minutos = m;
       fijDia();
     }
     if (botones == BOTON_IZQ) {
-      delay(200);
       rtc.setMinutes(m);
       minutos = m;
       fijHoras();
     }
     if (botones == BOTON_DER) {
-      delay(200);
       rtc.setMinutes(m);
       minutos = m;
       fijSegundos();
     }
     if (botones == BOTON_ARR) {
-      m += incremento;
-      if (m > 59) {
-        m = 0;
-      }
-      delay(200);
+      m = increm(m, 59, 0, 1);
     }
     if (botones == BOTON_ABJ) {
-      m -= incremento;
-      if (m > 59) {
-        m = 59;
-      }
-      delay(200);
+      m = decrem(m, 0, 59, 1);
     }
     lcd.setCursor(7,1);
     dosDigitos(m);
@@ -401,19 +381,16 @@ void fijSegundos() {
     botones = leerBotones();
     uint8_t incremento = 1;
     if (botones == BOTON_SELEC) {
-      delay(200);
       rtc.setSeconds(s);
       segundos = s;
       fijDia();
     }
     if (botones == BOTON_IZQ) {
-      delay(200);
       rtc.setSeconds(s);
       segundos = s;
       fijMinutos();
     }
     if (botones == BOTON_DER) {
-      delay(200);
       rtc.setSeconds(s);
       segundos = s;
       fijDia();
@@ -423,14 +400,12 @@ void fijSegundos() {
       if (s > 59) {
         s = 0;
       }
-      delay(200);
     }
     if (botones == BOTON_ABJ) {
       s -= incremento;
       if (s < 0 || s > 60) {
         s = 59;
       }
-      delay(200);
     }
     lcd.setCursor(12,1);
     dosDigitos(s);
@@ -599,24 +574,20 @@ void programar() {
      botones = leerBotones();
      uint8_t incremento = 1;
      if (botones == BOTON_SELEC) {
-       delay(200);
        parametros();
      }
      if (botones == BOTON_IZQ) {
-       delay(200);
        muestraTiempo();
      }
      if (botones == BOTON_DER) {
-       delay(200);
        parametros();
      }
      if (botones == BOTON_ARR) {
        etapas += incremento;
-       if (etapas > 100)
+       if (etapas > 10)
        {
          etapas = 1;
        }
-       delay(200);
      }
      if (botones == BOTON_ABJ) {
        etapas -= incremento;
@@ -624,7 +595,6 @@ void programar() {
        {
          etapas = 10;
        }
-       delay(200);
      }
      lcd.setCursor(10,1);
      lcd.print(etapas);
@@ -632,127 +602,108 @@ void programar() {
 }
 
 void parametros() {
+  lcd.clear();
+  lcd.home();
+  lcd.print("Etapa ");
   for (uint8_t i = 1; i <= etapas; i++) {
-    lcd.clear();
-    lcd.home();
     /*         123567890123456*/
-    lcd.print("Etapa ");
-    lcd.print(i);
+    lcd.setCursor(6, 0); lcd.print(i);
     lcd.setCursor(0, 1);
     uint8_t valHum, valTem;
     uint8_t valLlu, valLuz;
     int valDur;
-    defHumedad();
+    valHum = defHumedad();
+    valTem = defTemperatura();
+    valLuz = defLuz();
+    valLlu = defRocio();
+    valDur = defDuracion();
     condiciones condicionesX(valHum, valTem, valLlu, valLuz, valDur);
     pasos.push_back(condicionesX);
   }
   Serial.print(pasos[0].usaT());
   Serial.print(pasos[1].usaT()); //Solo para verificar que los datos sean correctos
-  opEstados = CORRER;
+  uint8_t botones = 0;
+  for (size_t i = 1; i < etapas; i++) {
+    lcd.clear();
+    lcd.home();
+    lcd.print("Etapa: "); lcd.print(i);
+    pasos[i].muestra();
+    while (botones != BOTON_DER) {
+      botones = leerBotones();
+      if (botones == BOTON_IZQ) {
+        i--;
+        if (i <= 0) {
+          i = 1;
+        }
+        break;
+      }
+    };
+  }
+  lcd.clear();
+  lcd.home(); lcd.print("Iniciar");
+  lcd.setCursor(0, 1); lcd.print("Presiona Selec");
+  botones = 0;
+  while (botones == BOTON_SELEC ) {
+    opEstados = CORRER;
+  }
 }
 
 
 uint8_t defHumedad() {
   lcd.setCursor(0, 1);
            //123456789123456
-  lcd.print("HR %           ");
+  lcd.print("HR       %     ");
   uint8_t botones = 0;
   uint8_t valHum = 50;
   while (true) {
    botones = leerBotones();
    if (botones == BOTON_SELEC)
    {
-     defTemperatura();
+     return valHum;
    }
-   if (botones == BOTON_IZQ_LAR) {
-     valHum = decrem(valHum, 0, 100, 10);
-   }
-   if (botones == BOTON_ARR_LAR) {
-     valHum = increm(valHum, 100, 0, 10 );
-   }
-   if (botones == BOTON_ARR) {
-     valHum = increm(valHum, 100, 0, 1);
-   }
-   if (botones == BOTON_ABJ) {
-     valHum = decrem(valHum, 0, 100, 1);
-   }
-   if (botones == BOTON_DER) {
-     defTemperatura();
-   }
-   if (botones == BOTON_IZQ)
-   {
+   if (botones == BOTON_IZQ) {
      programar();
    }
+   if (botones == BOTON_ARR) {
+     valHum = increm(valHum, 99, 10, 1);
+   }
+   if (botones == BOTON_ABJ) {
+     valHum = decrem(valHum, 10, 99, 1);
+   }
+   if (botones == BOTON_DER) {
+     return valHum;
+   }
    lcd.setCursor(6, 1);
-   lcd.print(valHum);
+   dosDigitos(valHum);
   }
 }
 
-uint8_t increm(uint8_t var, uint8_t limite, uint8_t mini, uint8_t incremento) {
-  var += incremento;
-  if (var > limite)
-  {
-    var = mini;
-  }
-  return var;
-}
-
-uint8_t decrem(uint8_t var, uint8_t limite, uint8_t max, uint8_t incremento) {
-  var -= incremento;
-  if (var < limite)
-  {
-    var = max;
-  }
-  return var;
-}
 
 uint8_t defTemperatura() {
   lcd.setCursor(0, 1);
-  lcd.print("Temp            ");
+  lcd.print("Temp        C   ");
   uint8_t valTem = 20;
   uint8_t botones = 0;
   while (true) {
    botones = leerBotones();
-   uint8_t incremento = 1;
    if (botones == BOTON_SELEC) {
-     delay(200);
-     defLuz();
      return valTem;
    }
    if (botones == BOTON_IZQ) {
-     valTem -= incremento * 10;
-     if (valTem < 0)
-     {
-       valTem = 100;
-     }
-     delay(200);
+     defHumedad();
+     return valTem;
    }
    if (botones == BOTON_DER) {
-     valTem += incremento * 10;
-     if (valTem > 100)
-     {
-       valTem = 0;
-     }
-     delay(200);
+     return valTem;
    }
    if (botones == BOTON_ARR) {
-     valTem += incremento;
-     if (valTem > 100)
-     {
-       valTem = 0;
-     }
-     delay(200);
+     valTem = increm(valTem, 80, 0, 1);
    }
    if (botones == BOTON_ABJ) {
-     valTem -= incremento;
-     if (valTem < 0)
-     {
-       valTem = 100;
-     }
-     delay(200);
+     valTem = decrem(valTem, 0, 80, 1);
    }
    lcd.setCursor(6, 1);
-   lcd.print(valTem);
+   dosDigitos(valTem);
   };
 }
 
@@ -765,104 +716,106 @@ uint8_t defLuz() {
   while (true) {
     botones = leerBotones();
     if (botones == BOTON_IZQ) {
-      delay(200);
-      defHumedad();
+      defTemperatura();
       return valLuz;
     }
     if (botones == BOTON_DER) {
-      delay(200);
-      defRocio();
       return valLuz;
     }
     if (botones == BOTON_ARR) {
       lcd.setCursor(10, 1);
       lcd.print("Si");
       valLuz = 1;
-      delay(500);
     }
     if (botones == BOTON_ABJ) {
       lcd.setCursor(10, 1);
       lcd.print("No");
       valLuz = 0;
-      delay(500);
+    }
+    if (botones == BOTON_SELEC) {
+      return valLuz;
     }
   };
 }
 
 uint8_t defRocio() {
   lcd.setCursor(0, 1);
-  lcd.print("                ");
-  lcd.setCursor(0, 1);
-  lcd.print("Con lluvia?");
+  lcd.print("Con lluvia?     ");
   uint8_t valLlu = 1;
   uint8_t botones = 0;
   while (true) {
     botones = leerBotones();
     if (botones == BOTON_IZQ) {
-      delay(200);
       defLuz();
       return valLlu;
     }
     if (botones == BOTON_DER) {
-      delay(200);
-      defDuracion();
       return valLlu;
     }
     if (botones == BOTON_ARR) {
       lcd.setCursor(13, 1);
       lcd.print("Si");
       valLlu = 1;
-      delay(500);
     }
     if (botones == BOTON_ABJ) {
       lcd.setCursor(13, 1);
       lcd.print("No");
       valLlu = 0;
-      delay(500);
+    }
+    if (botones == BOTON_SELEC) {
+      return valLlu;
     }
   }
 }
 
 int defDuracion() {
   lcd.setCursor(0, 1);
-  lcd.print("                ");
-  lcd.setCursor(0, 1);
-  lcd.print("Duracion ");
+  lcd.print("Duracion     min");
   int valDur = 60;
   uint8_t botones = 0;
   while (true) {
    botones = leerBotones();
-   uint8_t incremento = 1;
    if (botones == BOTON_SELEC) {
-     incremento *= 10;
+     return valDur;
    }
    if (botones == BOTON_IZQ) {
-     delay(200);
      defRocio();
      return valDur;
    }
    if (botones == BOTON_DER) {
-    delay(200);
     return valDur;
    }
    if (botones == BOTON_ARR) {
-     valDur += incremento;
-     delay(200);
+     valDur = increm(valDur, 720, 1, 1);
    }
    if (botones == BOTON_ABJ) {
-     valDur -= incremento;
-     delay(200);
+     valDur = decrem(valDur, 1, 720, 1);
    }
    lcd.setCursor(10, 1);
-   lcd.print(valDur);
+   dosDigitos(valDur);
   };
 }
 
 
-void correr(/* arguments */) {
-  /* code */
+void correr() {
+
 }
 
+uint8_t increm(uint8_t var, uint16_t limite, uint8_t mini, uint8_t incremento) {
+  var += incremento;
+  if (var > limite || var < mini) {
+    var = mini;
+  }
+  return var;
+}
+
+uint8_t decrem(uint8_t var, uint16_t limite, uint8_t max, uint8_t incremento) {
+  var -= incremento;
+  if (var < limite || var > max) {
+    var = max;
+  }
+  return var;
+}
 /* función de control
 void correr() {
   digitalWrite(rel1, LOW);
@@ -933,85 +886,54 @@ for (size_t i = 1; i =< pasos; i++) {
  lcd.setCursor(0,1);
  lcd.print('Ciclo');
  lcd.print(i);
- humedad();
- temperatura();
- luz();
+
+
+
+byte idenBoton()
  lluvia();
 }
 }
 */
 
 byte leerBotones() {
-  uint8_t botones = 0;
-  while (botonLiberado = true)
-  {
-    botones = idenBoton();
-    if (botones != botonEdoUlt && botones != BOTON_NO)
-    {
-      botonPresionado = true;
-      botonLiberado = false;
-      ulTimer = millis();
-    }
-    if ((millis()-ulTimer) > retrasoBut)
-    {
-      if (botones != botonEdo)    
-      {
-        botonEdo = botones;
-      }
-    }
-    if (botones == BOTON_NO && botonEdoUlt != BOTON_NO)
-    {
-      botonLiberado = true;
-      botonPresionado = false;
-    }
-    if (botones != BOTON_NO && botones == botonEdoUlt)
-    {
-      botonPresionado = true;
-      botonLiberado = false;
-      if ((millis()-ulTimer) > apretarLargo)
-      {
-        botones += 1;
-        botonEdo = botones;
-        break;
-      }
-    }
-    botonEdoUlt = botones;
+  uint8_t botones;
+  if (millis() > tiempoAnt + tiempoRef ) {
+    voltAnt = botonVolt;
+    botonVolt = analogRead(BOTON_PIN_ADC);
   }
-  return botones;
-}
-
-
-
-byte idenBoton() {
-  int botonVoltaje;
-  uint8_t botones = BOTON_NO;   // return no boton pressed if the below checks don't write to btn
-
-  //read the boton ADC pin voltage
-  botonVoltaje = analogRead( BOTON_PIN_ADC );
-  //sense if the voltage falls within valid voltage windows
-  if( botonVoltaje <= ( DER_ADC + HISTERESIS ) && botonVoltaje >= (DER_ADC - HISTERESIS))
+  if (botonVolt <= voltAnt + HISTERESIS && botonVolt >= voltAnt - HISTERESIS) {
+    cambio = false;
+    botones = botonEdo;
+  } else {
+    cambio = true;
+    botonEdo = botones;
+  }
+  if( botonVolt <= ( DER_ADC + HISTERESIS ) && botonVolt >= (DER_ADC - HISTERESIS))
   {
     botones = BOTON_DER;
   }
-  else if(   botonVoltaje >= ( ARR_ADC - HISTERESIS )
-          && botonVoltaje <= ( ARR_ADC + HISTERESIS ) )
+  else if(   botonVolt >= ( ARR_ADC - HISTERESIS )
+          && botonVolt <= ( ARR_ADC + HISTERESIS ) )
   {
     botones = BOTON_ARR;
   }
-  else if(   botonVoltaje >= ( ABJ_ADC - HISTERESIS )
-          && botonVoltaje <= ( ABJ_ADC + HISTERESIS ) )
+  else if(   botonVolt >= ( ABJ_ADC - HISTERESIS )
+          && botonVolt <= ( ABJ_ADC + HISTERESIS ) )
   {
     botones = BOTON_ABJ;
   }
-  else if(   botonVoltaje >= ( IZQ_ADC - HISTERESIS )
-          && botonVoltaje <= ( IZQ_ADC + HISTERESIS ) )
+  else if(   botonVolt >= ( IZQ_ADC - HISTERESIS )
+          && botonVolt <= ( IZQ_ADC + HISTERESIS ) )
   {
     botones = BOTON_IZQ;
   }
-  else if(   botonVoltaje >= ( SELEC_ADC - HISTERESIS )
-          && botonVoltaje <= ( SELEC_ADC + HISTERESIS ) )
+  else if(   botonVolt >= ( SELEC_ADC - HISTERESIS )
+          && botonVolt <= ( SELEC_ADC + HISTERESIS ) )
   {
     botones = BOTON_SELEC;
   }
-  return( botones );
-}
+  if (cambio) {
+    return( botones );
+  } else return ESPERA;
+  tiempoAnt = millis();
+};
