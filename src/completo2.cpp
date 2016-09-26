@@ -65,7 +65,6 @@ RTCZero rtc;
 char nombreArchiv[15];
 float voltBateria;
 uint8_t contadorMues;
-uint8_t regresivo;
 
 const int dhtpin = 13;
 uint8_t contadorArch;
@@ -204,8 +203,6 @@ float uv;
 float hR;
 float tA;
 uint falta;
-long retiene;
-byte inicial;
 
 Relevadores relHum(A2), relTem(A3), relAsp(A5), relLuz(A4);
 
@@ -267,9 +264,6 @@ tiempos opReloj = HORAS;
 
 enum Parametros { HUM=0, TEMP, ASPER, LUZ, DUR, DEFINIR };
 Parametros opPara = HUM;
-
-enum datos {hyT=0, lUv, cuenta, hhmm };
-datos opDatos = hyT;
 
 /*--------------------------------------------------------------------------------------
 setup()
@@ -747,22 +741,7 @@ void seleccionar() {
     if (botones == BOTON_ARR) {
       selecc = increm(selecc, 1, 0, 1);
     }
-    lcd.setCursor(14,1);
-    if (selecc) {
-      lcd.print("Si");
-    } else {
-      lcd.print("No")
-    }
-  }
-}
-
-void selec2() {
-  lcd.clear(); lcd.home(); lcd.print("Protocolo a usar");
-  uint8_t botones = 0;
-  File datosGuardados = SD.open()
-  while (true) {
-    botones = leerBotones();
-
+    lcd.setCursor(uint8_t col, uint8_t row)
   }
 }
 
@@ -960,11 +939,11 @@ void controlReg() {
         relLuz.actualRel(LOW);
         Serial.println("Relevador Luz apagado");
       }
-      uint8_t duracionC = para_etapas[i].usaD();
-      regresivo = duracionC * 240;
+      int16_t regresivo = para_etapas[i].usaD()*60*4;
+      falta = regresivo;
       while(regresivo > 0) {
         botones = leerBotones();
-        if (botones == BOTON_IZQ) {
+        if (botones == BOTON_SELEC) {
           archReg.close();
           bool confir = confirma();
           if (confir) {
@@ -982,12 +961,12 @@ void controlReg() {
           sigAlarmSeg = (sigAlarmSeg + intMuestraSec)%60;
           rtc.setAlarmSeconds(sigAlarmSeg);
           rtc.enableAlarm(rtc.MATCH_SS);
-          alarmaAct = true;
           contadorMues ++;
           regresivo --;
           falta = regresivo;
           serialMed();
           Serial.print("Faltan "); Serial.println(falta);
+          alarmaAct = true;
           rtc.attachInterrupt(alarmMatch);
         }
         if(hR < para_etapas[i].usaH() && !relHum.edoRel()) {
@@ -1066,7 +1045,6 @@ void regMed() {
   archReg.println(cadenaDatos);
 }
 
-//Función para crear una linea de registro para monitoreo serial, SE PUEDE BORRAR en la definitiva.
 void serialMed() {
   uint16_t luxesA = sensorLuz();
   float uvA = sensorUV();
@@ -1084,50 +1062,28 @@ void serialMed() {
 }
 
 void datosPantalla() {
-  switch (opDatos) {
-    case hyT:
-      sensorHRT();
-      lcd.clear(); lcd.home(); lcd.print("Humedad: "); lcd.print(hR); lcd.print("%");
-      lcd.setCursor(0,1); lcd.print("Temp: "); lcd.print(tA);
-      if (!inicial) {
-        retiene = millis();
-        inicial = 1;
-      }
-      if (retiene + 3000 > millis()) {
-        opDatos = hyT;
-      } else {
-        opDatos = lUv;
-      }
-      break;
-    case lUv:
-      sensorLuz();
-      sensorUV();
-      lcd.clear(); lcd.home(); lcd.print("Luz: "); lcd.print(luxes); lcd.print(" Lux");
-      lcd.setCursor(0, 1); lcd.print("UV: "); lcd.print(uv); lcd.print(" mW/cm2");
-      if (retiene + 6000 > millis()) {
-        opDatos = lUv;
-      } else {
-        opDatos = cuenta;
-      }
-      break;
-    case cuenta:
-      lcd.clear(); lcd.home(); lcd.print("Quedan "); lcd.print(falta/4/60); lcd.print(":"); lcd.print(falta/4%60);
-      lcd.setCursor(0, 1); lcd.print("para completar");
-      if (retiene + 9000 > millis()) {
-        opDatos = cuenta;
-      } else {
-        opDatos = hhmm;
-      }
-      break;
-    case hhmm:
-      muestraTiempo();
-      if (retiene + 12000 > millis()) {
-        opDatos = hhmm;
-      } else {
-        opDatos = hyT;
-        inicial = 0;
-      }
-      break;
+  long retiene = millis();
+  hR = dht.readHumidity();
+  tA = dht.readTemperature();
+  uint16_t luxesA = sensorLuz();
+  float uvA = sensorUV();
+  lcd.clear(); lcd.home(); lcd.print("Humedad: "); lcd.print(hR); lcd.print("%");
+  lcd.setCursor(0,1); lcd.print("Temp: "); lcd.print(tA);
+  while (retiene + 1000 > millis()) {
+  }
+  retiene = millis();
+  lcd.clear(); lcd.home(); lcd.print("Luz: "); lcd.print(luxes); lcd.print(" Lux");
+  lcd.setCursor(0, 1); lcd.print("UV: "); lcd.print(uv); lcd.print(" mW/cm2");
+  while (retiene + 1000 > millis()) {
+  }
+  retiene = millis();
+  while (retiene + 1000 > millis()) {
+    muestraTiempo();
+  }
+  retiene = millis();
+  lcd.clear(); lcd.home(); lcd.print("Quedan "); lcd.print(falta);
+  lcd.setCursor(0, 1); lcd.print("para completar");
+  while (retiene + 1000 > millis()) {
   }
 }
 
@@ -1384,6 +1340,7 @@ uint8_t decrem(uint8_t var, uint16_t limite, uint8_t max, uint8_t incremento) {
   }
   return var;
 }
+
 
 byte leerBotones() {
   botonVolt = analogRead(BOTON_PIN_ADC);
