@@ -1,0 +1,4 @@
+etapa, humedad, temperatura, aspersion, uv, ir, duracion,
+1, 30, 20, 0, 1, 0, 8
+2, 30, 20, 0, 0, 1, 4
+3, 30, 20, 1, 0, 0, 4

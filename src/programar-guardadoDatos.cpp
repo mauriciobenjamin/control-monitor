@@ -1,10 +1,10 @@
-// ************************************************
-// Programar una secuencia propia de pruebas
-// Arriba/Abajo para cambiar los valores de cada parametro
-// Derecha para aceptar un parametro y pasar al siguiente
-// Izquierda para regresar al parametro anterior
-// Seleccionar/Shift para cambiar de 10 en 10 (revisar si no se necesita otra funcionalidad después)
-// ************************************************
+/************************************************
+Este script es experimental para implementar la
+opción de agregar programaciones fijas y guardarlas
+en la tarjeta SD
+Autor: mauriciobenjamin@gmail.com
+Github: https://github.com/mauriciobenjamin/control-monitor
+************************************************/
 #include <Arduino.h>
 #include <LiquidCrystal.h>
 #include <SD.h>
@@ -231,6 +231,8 @@ uint8_t defDuracion();
 byte leerBotones();
 void inicio();
 void programar();
+void usar();
+void medir();
 void parametros();
 void variables();
 void correr();
@@ -273,7 +275,7 @@ uint8_t increm(uint8_t var, uint16_t limite, uint8_t min, uint8_t incremento);
 /*-------
 Estados de la máquina de estados
 ------------------------------------------------*/
-enum estados { INICIO=0, RELOJ, SELECCIONAR, PROGRAMAR, PARAMETROS, GUARDAR, CORRER };
+enum estados { INICIO=0, RELOJ, SELECCIONAR, PROGRAMAR, USAR, MEDIR, PARAMETROS, GUARDAR, CORRER };
 estados opEstados = INICIO;
 
 enum tiempos { HORAS=0, MINUTOS, SEGUNDOS, DIA, MES, ANO, SALIR };
@@ -339,18 +341,24 @@ void loop() {
     case RELOJ:
       reloj();
       break;
-  //  case SELECCIONAR:
-  //    seleccionar();
-  //    break;
+    case SELECCIONAR:
+     seleccionar();
+     break;
     case PROGRAMAR:
      programar();
      break;
+    case USAR:
+      usar();
+      break;
+    case MEDIR:
+      medir();
+      break;
     case PARAMETROS:
      parametros();
      break;
-  //  case GUARDAR:
-  //    guardar();
-  //    break;
+    case GUARDAR:
+     guardar();
+     break;
     case CORRER:
      correr();
      break;
@@ -414,7 +422,7 @@ void reloj() {
     muestraTiempo();
     botones = leerBotones();
     if (botones == BOTON_SELEC) {
-      opEstados = PROGRAMAR;
+      opEstados = SELECCIONAR;
       return;
     }
     if (botones == BOTON_IZQ) {
@@ -734,20 +742,41 @@ String marcaHora() {
 
 /*------- FUNCIONES DE ADMINISTRACIÓN DE DATOS ------------------
  Aquí van las funciones que leen las programaciones ya guardadas y guardan
- programaciones nuevas-----------------------------------------
+ programaciones nuevas
+-----------------------------------------*/
 
 void seleccionar() {
-  lcd.clear(); lcd.home(); lcd.print("Desea usar un ");
-  lcd.setCursor(0,1); lcd.print("ciclo guardado? ");
+  //                             0123456789012345
+  lcd.clear(); lcd.home(); lcd.print("Selecciona: ");
+  lcd.setCursor(0,1); lcd.print(" Prog Usar Medir");
   uint8_t botones = 0;
   bool selecc = true;
+  byte posCursor = 1;
+  lcd.cursor(); lcd.blink(); lcd.setCursor(posCursor, 1);
   while (true) {
     botones = leerBotones();
-    if (botones == BOTON_SELEC && selecc == true) {
-      return selec2();
+    if (botones == BOTON_DER) {
+      posCursor += 5;
+      if (posCursor > 15) {
+        posCursor = 1;
+      }
+      lcd.setCursor(posCursor, 1);
     }
-    if (botones == BOTON_SELEC && selecc == false) {
-      opEstados = PROGRAMAR;
+    if (botones == BOTON_SELEC) {
+      switch (posCursor) {
+        case 1:
+          opEstados = PROGRAMAR;
+          lcd.noCursor(); lcd.noBlink();
+          break;
+        case 6:
+          opEstados = USAR;
+          lcd.noCursor(); lcd.noBlink();
+          break;
+        case 11:
+          opEstados = MEDIR;
+          lcd.noCursor(); lcd.noBlink();
+          break;
+      };
       return;
     }
     if (botones == BOTON_IZQ) {
@@ -755,26 +784,37 @@ void seleccionar() {
       return;
     }
     if (botones == BOTON_ABJ) {
-      selecc = decrem(selecc, 0, 1, 1);
+      posCursor -= 5;
+      if (posCursor < 1) {
+        posCursor = 11;
+      }
+      lcd.setCursor(posCursor, 1);
     }
     if (botones == BOTON_ARR) {
-      selecc = increm(selecc, 1, 0, 1);
-    }
-    lcd.setCursor(14,1);
-    if (selecc) {
-      lcd.print("Si");
-    } else {
-      lcd.print("No")
+      posCursor += 5;
+      if (posCursor > 15) {
+        posCursor = 1;
+      }
+      lcd.setCursor(posCursor, 1);
     }
   }
 }
 
-void selec2() {
+void usar() {
+  lcd.noCursor(); lcd.noBlink();
   lcd.clear(); lcd.home(); lcd.print("Protocolo a usar");
   uint8_t botones = 0;
-  File datosGuardados = SD.open()
+  File datosGuardados = SD.open("/ciclos/");
   while (true) {
     botones = leerBotones();
+    File archivoDatos = dir.openNextFile();
+    if (!archivoDatos) {
+      dir.rewindDirectory();
+      break;
+    } else {
+      archivoDatos.close();
+    }
+    lcd.setCursor(0,1); lcd.print(archivoDatos.name());
     if (botones = BOTON_SELEC) {
       opEstados = CORRER;
       return;
@@ -786,6 +826,19 @@ void selec2() {
   }
 }
 
+void medir() {
+  lcd.noCursor(); lcd.noBlink();
+  while (true) {
+    datosPantalla();
+  }
+}
+
+void guardar() {
+  lcd.home();
+  lcd.print("Hola Mundo");
+}
+
+/*----------
 void muestraArch(File dir) {
   uint8_t numArchivos;
   while (true) {
@@ -804,7 +857,7 @@ void muestraArch(File dir) {
     listaArch.push_back(entry);
   }
 
-/*------- FUNCIONES PARA LA PROGRAMACIÖN DE PARAMETROS -------------
+/*------- FUNCIONES PARA LA PROGRAMACIÓN DE PARAMETROS -------------
 // Aquí van las funciones para programar los parametros de funcionamiento
 // del dispositivo ---------------------------------------------*/
 

@@ -23,21 +23,19 @@
 #define DHTTYPE DHT22
 #define BOTON_PIN_ADC           A0  // A0 is the boton ADC input
 // ADC readings expected for the 5 botons on the ADC input
-/*                      Con USB /  Con AC */
-#define DER_ADC         1 // 8   // derecha 4
-#define ARR_ADC          146 // 151  // up 154
-#define ABJ_ADC          329// 337  // down 344
-#define IZQ_ADC          491// 501  // left 513
-#define SELEC_ADC        697// 711  // derecha 728
-#define NO_ADC           928 // No boton
-#define HISTERESIS         40  // hysteresis for valid boton sensing window
-/*-- CON USB
+/*                      Con USB /  Con AC
+#define DER_ADC          4 // 8   // derecha 4
+#define ARR_ADC          154 // 151  // up 154
+#define ABJ_ADC          344// 337  // down 344
+#define IZQ_ADC          513// 501  // left 513
+#define SELEC_ADC        728// 711  // derecha 728
+#define HISTERESIS         5  // hysteresis for valid boton sensing window
+/*-- CON USB */
 #define DER_ADC          3   // derecha 4
 #define ARR_ADC          151  // up 154
 #define ABJ_ADC          337  // down 344
 #define IZQ_ADC          501  // left 513
 #define SELEC_ADC        710  // derecha 728
-#define NO_ADC           944 // No boton
 #define HISTERESIS       5 //  hysteresis for valid boton sensing window--*/
 
 //return values for leerBotones()
@@ -50,12 +48,13 @@ const byte BOTON_SELEC     = 5;
 const int ESPERA = -1;
 //////////// Constantes de la tarjeta uSD ///////////////
 const uint8_t tarjeta = 4; // Pin para la tarjeta SD
-const uint8_t intMuestraMin = 1;  //Intervalo de muestreo en minutos
+const uint8_t intMuestraMin = 0;  //Intervalo de muestreo en minutos
 const unsigned long intMuestraSec = 15; //Intervalo de muestreo en segundos
-const uint8_t muestraCiclo = 15; // Numero de muestras antes de hacer un limpiado de uSD
+const uint8_t muestraCiclo = 80; // Numero de muestras antes de hacer un limpiado de uSD
 const uint muestrapArch = 8640; //Numero de muestras por archivo, considerando una muestra por minuto, se archivarían 30 días de mediciones en cada archivo.
 uint8_t sigAlarmSeg = 0;
 uint8_t sigAlarmMin = 0;
+unsigned long contSeg;
 bool alarmaAct = false;
 extern "C" char *sbrk(int i); //Esto es para la función de FreeRAM
 File archReg;
@@ -65,8 +64,7 @@ RTCZero rtc;
 
 char nombreArchiv[15];
 float voltBateria;
-uint8_t contadorMues = 0;
-long regresivo;
+uint8_t contadorMues;
 
 const int dhtpin = 13;
 uint8_t contadorArch;
@@ -108,15 +106,15 @@ class condiciones {
   uint8_t humedad;
   uint8_t temperatura;
   uint8_t duracion;
-  bool aspersor;
+  byte aspersor;
   bool luz;
 
 public:
-  condiciones (uint8_t hum, uint8_t temp, bool luces, uint8_t tiemp, bool asper)
+  condiciones (uint8_t hum, uint8_t temp, bool luces, uint8_t tiemp, byte asper)
   {
     humedad = hum;
     temperatura = temp;
-    aspersor = asper;
+    asper = aspersor;
     luz = luces;
     duracion = tiemp;
   };
@@ -124,35 +122,29 @@ public:
   condiciones() {};
 
   void muestra(){
-    lcd.setCursor(0, 1);
-    if (humedad) {
-      lcd.print("Si Hume");
-    } else {
-      lcd.print("No Hume");
-    }
-    lcd.setCursor(10,1);
-    if (temperatura) {
-      lcd.print("Si IR");
-    } else {
-      lcd.print("No IR");
-    }
+    lcd.setCursor(0,1);
+    lcd.print(humedad);
+    lcd.print(" % HR ");
+    lcd.print(temperatura);
+    lcd.print("C ");
     delay(2000);
     lcd.clear();
-    lcd.setCursor(0,0);
-    if(luz) {
-      lcd.print("Si Luz");
-    } else {
-      lcd.print("No Luz ");
-    };
-    lcd.setCursor(9, 0);
+    lcd.home();
     if(aspersor) {
-      lcd.print("Si Asper");
+      lcd.print("Asper");
     } else {
       lcd.print("No Asper");
     }
+    lcd.setCursor(9, 0);
+    if(luz) {
+      lcd.print("Luz");
+    } else {
+      lcd.print("No luz ");
+    };
     lcd.setCursor(0, 1);
     lcd.print("Duracion ");
     lcd.print(duracion); lcd.print(" h");
+    delay(200);
   };
 
   uint8_t usaH() {
@@ -163,7 +155,7 @@ public:
     return temperatura;
   };
 
-  bool usaAsp() {
+  byte usaAsp() {
     return aspersor;
   }
 
@@ -195,7 +187,7 @@ byte boton = BOTON_NO;
 uint voltAnt = BOTON_NO;
 uint botonVolt = BOTON_NO;
 long tiempoAnt;
-const long tiempoRef = 30;
+const long tiempoRef = 200;
 bool cambio = false;
 
 uint8_t ciclos = 1;
@@ -204,17 +196,13 @@ uint16_t luxes;
 uint8_t horas = 12;
 uint8_t minutos = 30;
 uint8_t segundos = 30;
-uint8_t dia = 25;
-uint8_t mes = 11;
+uint8_t dia = 13;
+uint8_t mes = 9;
 uint8_t ano = 16;
 float uv;
 float hR;
 float tA;
 uint falta;
-long retiene;
-byte inicial;
-byte etapaActual;
-byte cicloActual;
 
 Relevadores relHum(A2), relTem(A3), relAsp(A5), relLuz(A4);
 
@@ -249,11 +237,6 @@ void muestra();
 void dosDigitos(int val);
 void registroInicial();
 void datosPantalla();
-void humPantalla();
-void luzPantalla();
-void regresivoPantalla();
-void serialMed();
-void controlReg();
 
 void sensorHRT();
 uint16_t sensorLuz();
@@ -281,9 +264,6 @@ tiempos opReloj = HORAS;
 
 enum Parametros { HUM=0, TEMP, ASPER, LUZ, DUR, DEFINIR };
 Parametros opPara = HUM;
-
-enum datos {hyT=0, lUv, cuenta, hhmm };
-datos opDatos = hyT;
 
 /*--------------------------------------------------------------------------------------
 setup()
@@ -732,21 +712,22 @@ String marcaHora() {
   return marca;
 }
 
-/*------- FUNCIONES DE ADMINISTRACIÓN DE DATOS ------------------
- Aquí van las funciones que leen las programaciones ya guardadas y guardan
+/*------- FUNCIONES DE ADMINISTRACIÖN DE DATOS ------------------
+// Aquí van las funciones que leen las programaciones ya guardadas, guardan
  programaciones nuevas-----------------------------------------
 
 void seleccionar() {
   lcd.clear(); lcd.home(); lcd.print("Desea usar un ");
-  lcd.setCursor(0,1); lcd.print("ciclo guardado? ");
+  lcd.setCursor(0,1); lcd.print("ciclo previo ");
   uint8_t botones = 0;
   bool selecc = true;
   while (true) {
     botones = leerBotones();
     if (botones == BOTON_SELEC && selecc == true) {
-      return selec2();
+      selec2();
+      return;
     }
-    if (botones == BOTON_SELEC && selecc == false) {
+    if (botones == BOTON_SELEC && selec == false) {
       opEstados = PROGRAMAR;
       return;
     }
@@ -760,49 +741,9 @@ void seleccionar() {
     if (botones == BOTON_ARR) {
       selecc = increm(selecc, 1, 0, 1);
     }
-    lcd.setCursor(14,1);
-    if (selecc) {
-      lcd.print("Si");
-    } else {
-      lcd.print("No")
-    }
+    lcd.setCursor(uint8_t col, uint8_t row)
   }
 }
-
-void selec2() {
-  lcd.clear(); lcd.home(); lcd.print("Protocolo a usar");
-  uint8_t botones = 0;
-  File datosGuardados = SD.open()
-  while (true) {
-    botones = leerBotones();
-    if (botones = BOTON_SELEC) {
-      opEstados = CORRER;
-      return;
-    }
-    if (botones = BOTON_ARR) {
-
-    }
-
-  }
-}
-
-void muestraArch(File dir) {
-  uint8_t numArchivos;
-  while (true) {
-
-    File entry =  dir.openNextFile();
-    if (! entry) {
-      // no more files
-      break;
-    }
-    numArchivos ++;
-    entry.close();
-  }
-  char listaArch[numArchivos];
-  for (size_t i = 0; i < numArchivos; i++) {
-    File entry = dir.openNextFile();
-    listaArch.push_back(entry);
-  }
 
 /*------- FUNCIONES PARA LA PROGRAMACIÖN DE PARAMETROS -------------
 // Aquí van las funciones para programar los parametros de funcionamiento
@@ -853,7 +794,7 @@ void parametros() {
     opPara = HUM;
     uint8_t valHum, valTem;
     bool valLuz;
-    bool valAsper;
+    byte valAsper;
     uint8_t valDur;
     while (opPara != DEFINIR) {
       switch (opPara) {
@@ -865,12 +806,12 @@ void parametros() {
         valTem = defTemperatura();
         delay(200);
         break;
-        case LUZ:
-        valLuz = defLuz();
-        delay(200);
-        break;
         case ASPER:
         valAsper = defAsper();
+        delay(200);
+        break;
+        case LUZ:
+        valLuz = defLuz();
         delay(200);
         break;
         case DUR:
@@ -906,7 +847,6 @@ void parametros() {
     lcd.home();
     lcd.print("Etapa: "); lcd.print(i+1);
     para_etapas[i].muestra();
-    botones = 0;
     while (botones != BOTON_DER) {
       botones = leerBotones();
       if (botones == BOTON_IZQ) {
@@ -948,29 +888,29 @@ void registroInicial() {
   }
   archReg = SD.open(nombreArchiv, FILE_WRITE);
   if (archReg) {
-    archReg.println("Registro de prueba de intemperismo");
+    archReg.println("Registro de prueba de intermperismo");
     archReg.println("Inicio de prueba: "+ marcatiempo());
-    archReg.print("Etapas por ciclo: "); archReg.println(etapas);
-    archReg.print("Ciclos programados: "); archReg.println(ciclos);
+    archReg.println("Etapas por ciclo: " + etapas);
+    archReg.println("Ciclos programados: " + ciclos);
     archReg.println("Parametros por etapa:");
-    for (size_t i = 0; i < etapas; i++) {
-      archReg.print("Etapa "); archReg.println(i+1);
-      archReg.println("Parametros: " + para_etapas[i].reg_parametros());
+    for (size_t i = 1; i < etapas; i++) {
+      archReg.println("Etapa " + i);
+      archReg.println("Parametros: " + para_etapas[i-1].reg_parametros());
     }
-    archReg.println("Fecha, Hora, Humedad, Temperatura, Luz, Uv, Humidificador, IR, Luces, Aspersión, Ciclo, Etapa");
+    archReg.println("Fecha, Hora, Humedad, Temperatura, Aspersion, Luz, Uv, Humidificador, IR, Luces");
     archReg.close();
 
-    Serial.println("Registro de prueba de intemperismo");
+    Serial.println("Registro de prueba de intermperismo");
     Serial.println("Registro en " + String(nombreArchiv));
     Serial.println("Inicio de prueba: "+ marcatiempo());
     Serial.println("Etapas por ciclo: " + String(etapas));
     Serial.println("Ciclos programados: " + String(ciclos));
     Serial.println("Parametros por etapa:");
-    for (size_t i = 0; i < etapas; i++) {
-      Serial.println("Etapa " + String(i+1));
-      Serial.println("Parametros: " + para_etapas[i].reg_parametros());
+    for (size_t i = 1; i <= etapas; i++) {
+      Serial.println("Etapa " + String(i));
+      Serial.println("Parametros: " + para_etapas[i-1].reg_parametros());
     }
-    Serial.println("Fecha, Hora, Humedad, Temperatura, Luz, Uv, Humidificador, IR, Luces, Aspersión, Ciclo, Etapa");
+    Serial.println("Fecha, Hora, Humedad, Temperatura, Aspersion, Luz, Uv, Humidificador, IR, Luces");
   } else {
     lcd.clear(); lcd.home();
     lcd.print("Error en archivo");
@@ -981,11 +921,9 @@ void registroInicial() {
 void controlReg() {
   lcd.clear(); lcd.home();
   uint8_t botones = 0;
-  int contCiclos = 1;
-  while (ciclos >= contCiclos || ciclos == 0) {
-    cicloActual = contCiclos;
+  int contCiclos = 0;
+  while (ciclos > contCiclos || ciclos == 0) {
     for (size_t i = 0; i < etapas; i++) {
-      etapaActual = i;
       if (para_etapas[i].usaAsp() && !relAsp.edoRel()) {
         relAsp.actualRel(HIGH);
         Serial.println("Relevador Lluvia encendido");
@@ -1001,30 +939,11 @@ void controlReg() {
         relLuz.actualRel(LOW);
         Serial.println("Relevador Luz apagado");
       }
-      if (para_etapas[i].usaH() && !relHum.edoRel()) {
-        relHum.actualRel(HIGH);
-        Serial.println("Relevador Humidificador encendido");
-      } else if (!para_etapas[i].usaH() && relHum.edoRel()) {
-        relHum.actualRel(LOW);
-        Serial.println("Relevador Humidificador apagado");
-      }
-      if (para_etapas[i].usaT() && !relTem.edoRel()) {
-        relTem.actualRel(HIGH);
-        Serial.println("Relevador IR encendido");
-      } else if (!para_etapas[i].usaT() && relTem.edoRel()) {
-        relTem.actualRel(LOW);
-        Serial.println("Relevador IR apagado");
-      }
-
-      uint8_t duracionC = para_etapas[i].usaD();
-      Serial.print("Se registra una duración de "); Serial.println(duracionC);
-      regresivo = duracionC * 60;
-      regMed();
-      serialMed();
-      archReg.flush();
+      int16_t regresivo = para_etapas[i].usaD()*60*4;
+      falta = regresivo;
       while(regresivo > 0) {
         botones = leerBotones();
-        if (botones == BOTON_IZQ) {
+        if (botones == BOTON_SELEC) {
           archReg.close();
           bool confir = confirma();
           if (confir) {
@@ -1038,20 +957,35 @@ void controlReg() {
           Serial.println("Se guardaron datos");
         }
         if(alarmaAct == false) {
-          serialMed();
-          sigAlarmSeg = rtc.getSeconds() - 1;
-          sigAlarmMin = (rtc.getMinutes() + intMuestraMin)%60;
-          rtc.setAlarmMinutes(sigAlarmMin);
+          sigAlarmSeg = rtc.getSeconds();
+          sigAlarmSeg = (sigAlarmSeg + intMuestraSec)%60;
           rtc.setAlarmSeconds(sigAlarmSeg);
-          rtc.enableAlarm(rtc.MATCH_MMSS);
-          alarmaAct = true;
+          rtc.enableAlarm(rtc.MATCH_SS);
           contadorMues ++;
+          regresivo --;
           falta = regresivo;
-          Serial.println(marcatiempo());
-          Serial.print("Siguiente alarma: "); Serial.print(sigAlarmMin); Serial.print(":"); Serial.println (sigAlarmSeg);
-          Serial.print("Ciclo "); Serial.print(cicloActual); Serial.print(" Etapa "); Serial.println(etapaActual);
+          serialMed();
           Serial.print("Faltan "); Serial.println(falta);
+          alarmaAct = true;
           rtc.attachInterrupt(alarmMatch);
+        }
+        if(hR < para_etapas[i].usaH() && !relHum.edoRel()) {
+          relHum.actualRel(HIGH);
+          Serial.println("Se activo Humidificador");
+        }
+        if (hR > para_etapas[i].usaH()){
+          if (relHum.edoRel()) {
+            relHum.actualRel(LOW);
+            Serial.println("Se apago el Humidificador");
+          }
+        }
+        if (tA < para_etapas[i].usaT() && !relTem.edoRel()) {
+          relTem.actualRel(HIGH);
+          Serial.println("Se activo el IR");
+        }
+        if (tA > para_etapas[i].usaT() && relTem.edoRel()){
+          relTem.actualRel(LOW);
+          Serial.println("Se apago el IR");
         }
         datosPantalla();
       }
@@ -1059,17 +993,10 @@ void controlReg() {
     contCiclos ++;
   }
   archReg.close();
-  opEstados = INICIO;
-  relHum.actualRel(LOW);
-  relTem.actualRel(LOW);
-  relLuz.actualRel(LOW);
-  relAsp.actualRel(LOW);
-  return;
 }
 
 void alarmMatch() {
   alarmaAct = false;
-  regresivo --;
 }
 
 //Funciones de los sensores
@@ -1080,6 +1007,10 @@ uint16_t sensorLuz() {
   ir = lum >> 16;
   full = lum & 0xFFFF;
   luxes = tsl.calculateLux(full, ir);
+  /** Serial.print("Luminancia: "); Serial.print(tsl.calculateLux(full, ir)); Serial.println(" Lux\t");
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Lum: "); lcd.print(tsl.calculateLux(full, ir)); lcd.print("Lux"); **/
   return luxes;
 }
 
@@ -1095,12 +1026,12 @@ float sensorUV() {
 }
 //Función para crear una linea de registro en el archivo
 
-  void regMed() {
+void regMed() {
+  archReg = SD.open(nombreArchiv, FILE_WRITE);
   hR = dht.readHumidity();
   tA = dht.readTemperature();
   uint16_t luxesA = sensorLuz();
   float uvA = sensorUV();
-  archReg = SD.open(nombreArchiv, FILE_WRITE);
   String cadenaDatos = "";
   cadenaDatos += marcatiempo();
   cadenaDatos += ", "; cadenaDatos += hR;
@@ -1109,14 +1040,11 @@ float sensorUV() {
   cadenaDatos += ", "; cadenaDatos += uvA;
   cadenaDatos += ", "; cadenaDatos += relHum.edoRel();
   cadenaDatos += ", "; cadenaDatos += relTem.edoRel();
-  cadenaDatos += ", "; cadenaDatos += relLuz.edoRel();
   cadenaDatos += ", "; cadenaDatos += relAsp.edoRel();
-  cadenaDatos += ", "; cadenaDatos += cicloActual;
-  cadenaDatos += ", "; cadenaDatos += etapaActual;
+  cadenaDatos += ", "; cadenaDatos += relLuz.edoRel();
   archReg.println(cadenaDatos);
 }
 
-//Función para crear una linea de registro para monitoreo serial, SE PUEDE BORRAR en la definitiva.
 void serialMed() {
   uint16_t luxesA = sensorLuz();
   float uvA = sensorUV();
@@ -1128,151 +1056,104 @@ void serialMed() {
   cadenaDatos += ", "; cadenaDatos += uvA;
   cadenaDatos += ", "; cadenaDatos += relHum.edoRel();
   cadenaDatos += ", "; cadenaDatos += relTem.edoRel();
-  cadenaDatos += ", "; cadenaDatos += relLuz.edoRel();
   cadenaDatos += ", "; cadenaDatos += relAsp.edoRel();
-  cadenaDatos += ", "; cadenaDatos += cicloActual;
-  cadenaDatos += ", "; cadenaDatos += etapaActual;
+  cadenaDatos += ", "; cadenaDatos += relLuz.edoRel();
   Serial.println(cadenaDatos);
 }
 
 void datosPantalla() {
-  switch (opDatos) {
-    case hyT:
-      if (!inicial) {
-        retiene = millis();
-        inicial = 1;
-      }
-      if (inicial == 1) {
-        humPantalla();
-        inicial ++;
-      }
-      if (retiene + 3000 < millis()) {
-        opDatos = lUv;
-      }
-      break;
-    case lUv:
-      if (retiene + 6000 < millis()) {
-        opDatos = cuenta;
-      }
-      if (inicial == 2) {
-        luzPantalla();
-        inicial ++;
-      }
-      break;
-    case cuenta:
-      if (inicial == 3) {
-        regresivoPantalla();
-        inicial ++;
-      }
-      if (retiene + 9000 < millis()) {
-        opDatos = hhmm;
-      }
-      break;
-    case hhmm:
-      muestraTiempo();
-      if (retiene + 12000 < millis()) {
-        opDatos = hyT;
-        inicial = 0;
-      }
-      break;
-  }
-}
-
-void humPantalla() {
-  sensorHRT();
+  long retiene = millis();
+  hR = dht.readHumidity();
+  tA = dht.readTemperature();
+  uint16_t luxesA = sensorLuz();
+  float uvA = sensorUV();
   lcd.clear(); lcd.home(); lcd.print("Humedad: "); lcd.print(hR); lcd.print("%");
   lcd.setCursor(0,1); lcd.print("Temp: "); lcd.print(tA);
-}
-
-void luzPantalla() {
-  sensorLuz();
-  sensorUV();
+  while (retiene + 1000 > millis()) {
+  }
+  retiene = millis();
   lcd.clear(); lcd.home(); lcd.print("Luz: "); lcd.print(luxes); lcd.print(" Lux");
   lcd.setCursor(0, 1); lcd.print("UV: "); lcd.print(uv); lcd.print(" mW/cm2");
-}
-
-void regresivoPantalla() {
-  lcd.clear(); lcd.home(); lcd.print("Quedan ");
-  dosDigitos(falta/60); lcd.print(":"); dosDigitos(falta%60);
+  while (retiene + 1000 > millis()) {
+  }
+  retiene = millis();
+  while (retiene + 1000 > millis()) {
+    muestraTiempo();
+  }
+  retiene = millis();
+  lcd.clear(); lcd.home(); lcd.print("Quedan "); lcd.print(falta);
   lcd.setCursor(0, 1); lcd.print("para completar");
+  while (retiene + 1000 > millis()) {
+  }
 }
 
 uint8_t defHumedad() {
   lcd.setCursor(0, 1);
-           //0123456789123456
-  lcd.print("Humedad?        ");
+           //123456789123456
+  lcd.print("HR       %      ");
   uint8_t botones = 0;
-  uint8_t valHum = 0;
+  uint8_t valHum = 50;
   while (true) {
-    botones = leerBotones();
-    if (botones == BOTON_SELEC) {
-      opPara = TEMP;
-      return valHum;
-    }
-    if (botones == BOTON_IZQ) {
-      opEstados = PARAMETROS;
-      opPara = DEFINIR;
-      return valHum;
-    }
-    if (botones == BOTON_DER) {
-      opPara = TEMP;
-      return valHum;
-    }
-    if (botones == BOTON_ARR) {
-      valHum = increm(valHum, 1, 0, 1);
-    }
-    if (botones == BOTON_ABJ) {
-      valHum = decrem(valHum, 0, 1, 1);
-    }
-    lcd.setCursor(10,1);
-    if (valHum) {
-      lcd.print("Si");
-    } else {
-      lcd.print("No");
-    }
+   botones = leerBotones();
+   if (botones == BOTON_SELEC){
+     opPara = TEMP;
+     return valHum;
+   }
+   if (botones == BOTON_IZQ) {
+     opEstados = PARAMETROS;
+     opPara = DEFINIR;
+     return valHum;
+   }
+   if (botones == BOTON_ARR) {
+     valHum = increm(valHum, 99, 10, 1);
+   }
+   if (botones == BOTON_ABJ) {
+     valHum = decrem(valHum, 10, 99, 1);
+   }
+   if (botones == BOTON_DER) {
+     opPara = TEMP;
+     return valHum;
+   }
+   lcd.setCursor(6, 1);
+   dosDigitos(valHum);
   }
 }
 
 uint8_t defTemperatura() {
   lcd.setCursor(0, 1);
-      //     01234567890123456
-  lcd.print("Infrarrojo?      ");
-  uint8_t valTem = 0;
+  lcd.print("Temp        C   ");
+  uint8_t valTem = 20;
   uint8_t botones = 0;
   while (true) {
-    botones = leerBotones();
-    if (botones == BOTON_SELEC) {
-      opPara = LUZ;
-      return valTem;
-    }
-    if (botones == BOTON_IZQ) {
-      opEstados = PARAMETROS;
-      opPara = HUM;
-      return valTem;
-    }
-    if (botones == BOTON_DER) {
-      opPara = LUZ;
-      return valTem;
-    }
-    if (botones == BOTON_ARR) {
-      valTem = increm(valTem, 1, 0, 1);
-    }
-    if (botones == BOTON_ABJ) {
-      valTem = decrem(valTem, 0, 1, 1);
-    }
-    lcd.setCursor(12,1);
-    if (valTem) {
-      lcd.print("Si");
-    } else {
-      lcd.print("No");
-    }
+   botones = leerBotones();
+   if (botones == BOTON_SELEC) {
+     opPara = ASPER;
+     return valTem;
+   }
+   if (botones == BOTON_IZQ) {
+     opPara = HUM;
+     return valTem;
+   }
+   if (botones == BOTON_DER) {
+     opPara = ASPER;
+     return valTem;
+   }
+   if (botones == BOTON_ARR) {
+     valTem = increm(valTem, 80, 0, 1);
+   }
+   if (botones == BOTON_ABJ) {
+     valTem = decrem(valTem, 0, 80, 1);
+   }
+   lcd.setCursor(6, 1);
+   dosDigitos(valTem);
   };
 }
 
 void sensorHRT() {
   unsigned long tLecturas = 2000;
-  if(tLecturas > millis() - tiempoAnt) {
-    tiempoAnt = millis();
+  unsigned long tActual = millis();
+  if(tLecturas < tActual - tiempoAnt) {
+    tiempoAnt = tActual;
   } else {
     hR = dht.readHumidity();
     tA = dht.readTemperature();
@@ -1295,28 +1176,26 @@ bool defLuz() {
   while (true) {
     botones = leerBotones();
     if (botones == BOTON_SELEC) {
-      opPara = ASPER;
+      opPara = DUR;
       return valLuz;
     }
     if (botones == BOTON_IZQ) {
-      opPara = TEMP;
-      return valLuz;
-    }
-    if (botones == BOTON_DER) {
       opPara = ASPER;
       return valLuz;
     }
+    if (botones == BOTON_DER) {
+      opPara = DUR;
+      return valLuz;
+    }
     if (botones == BOTON_ARR) {
-      valLuz = increm(valLuz, 1, 0, 1);
+      lcd.setCursor(10, 1);
+      lcd.print("Si");
+      valLuz = true;
     }
     if (botones == BOTON_ABJ) {
-      valLuz = decrem(valLuz, 0, 1, 1);
-    }
-    lcd.setCursor(9,1);
-    if (valLuz) {
-      lcd.print("Si");
-    } else {
+      lcd.setCursor(10, 1);
       lcd.print("No");
+      valLuz = false;
     }
   };
 }
@@ -1324,22 +1203,22 @@ bool defLuz() {
 bool defAsper() {
   lcd.setCursor(0,1);
   lcd.print("Lluvia?         ");
-  bool chipotle = 0;
+  byte chipotle = 0;
   uint8_t botones = 0;
   while(true) {
     botones = leerBotones();
     if (botones == BOTON_SELEC) {
-      opPara = DUR;
-      Serial.println(chipotle);
-      return chipotle;
-    }
-    if (botones == BOTON_IZQ) {
       opPara = LUZ;
       Serial.println(chipotle);
       return chipotle;
     }
+    if (botones == BOTON_IZQ) {
+      opPara = TEMP;
+      Serial.println(chipotle);
+      return chipotle;
+    }
     if (botones == BOTON_DER) {
-      opPara = DUR;
+      opPara = LUZ;
       Serial.println(chipotle);
       return chipotle;
     }
@@ -1440,7 +1319,7 @@ bool confirma() {
       lcd.print("No");
       confir = false;
     }
-    if (botones == BOTON_SELEC) {
+    if (botones == BOTON_SELEC && confir) {
       return confir;
     }
   }
@@ -1462,20 +1341,21 @@ uint8_t decrem(uint8_t var, uint16_t limite, uint8_t max, uint8_t incremento) {
   return var;
 }
 
+
 byte leerBotones() {
   botonVolt = analogRead(BOTON_PIN_ADC);
   if(botonVolt <= voltAnt + HISTERESIS && botonVolt >= voltAnt - HISTERESIS){
     cambio = false;
-  } else if(botonVolt <= voltAnt + 5 && botonVolt >= voltAnt) {
+  } else if(botonVolt <= voltAnt + 3 && botonVolt >= voltAnt) {
      cambio = false;
   } else {
     cambio = true;
   }
   if(cambio) {
-    if(botonVolt <= ( DER_ADC + HISTERESIS )){
+    if(botonVolt <= ( DER_ADC + 1 ) && botonVolt >= (DER_ADC - 1)){
       botonEdo = BOTON_DER;
     }
-    else if(botonVolt >= ( ARR_ADC - HISTERESIS )  && botonVolt <= ( ARR_ADC + HISTERESIS )){
+    else if(botonVolt >= ( ARR_ADC - 2 )  && botonVolt <= ( ARR_ADC + 2 )){
       botonEdo = BOTON_ARR;
     }
     else if(botonVolt >= ( ABJ_ADC - HISTERESIS ) && botonVolt <= ( ABJ_ADC + HISTERESIS ) ) {
@@ -1486,16 +1366,13 @@ byte leerBotones() {
     }
     else if(botonVolt >= ( SELEC_ADC - HISTERESIS ) && botonVolt <= ( SELEC_ADC + HISTERESIS )) {
       botonEdo = BOTON_SELEC;
-    }
-    else if (botonVolt > NO_ADC) {
+    } else {
       botonEdo = BOTON_NO;
     }
     voltAnt = botonVolt;
   }
-  if ((millis() - tiempoAnt) > tiempoRef && botonEdoUlt == BOTON_NO) {
+  if ((millis() - tiempoAnt) > tiempoRef) {
     boton = botonEdo;
-  } else {
-    boton = BOTON_NO;
   }
   if (cambio) {
     tiempoAnt = millis();

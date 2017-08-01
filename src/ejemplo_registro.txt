@@ -1,0 +1,10 @@
+Registro de prueba de intemperismo
+Inicio de prueba: TIME_STAMP
+Etapas totales: etapas
+Parametros por etapa
+Etapa n
+Humedad: humedad, temperatura: temperatura, luz: luz, lluvia: lluvia, duración: duracion
+Inicio: TIME_STAMP
+
+fecha, hora, humedad, temperatura, luz, uv, ilum, lluvia, neblina, ir
+31/08/16, 02:35:15, 65, 25, 600, 537, 0, 1, 0, 1
