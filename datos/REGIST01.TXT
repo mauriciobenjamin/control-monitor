@@ -1,0 +1,13 @@
+Registro de prueba de intermperismo
+Inicio de prueba: 29/09/16, 13:05:10
+Etapas por ciclo: 2
+Ciclos programados: 6
+Parametros por etapa:
+tapa 
+Parametros: Humedad: 80, Temperatura: 20, Aspersion: 0, Luz: 1, Duración: 2
+Fecha, Hora, Humedad, Temperatura, Luz, Uv, Humidificador, IR, Luces, Bomba
+29/09/16, 13:24:55, 60.10, 20.10, 108,  0.01, 1, 0, 1, 0
+29/09/16, 13:44:55, 57.30, 23.10, 255, 0.18, 1, 0, 1, 0
+29/09/16, 14:04:56, 55.20, 23.80, 236,  0.04, 1, 0, 1, 0
+29/09/16, 14:24:56, 53.60, 24.10, 253, 0.11, 1, 0, 1, 0
+29/09/16, 14:44:56, 53.00, 24.40, 234,  0.06, 1, 0, 1, 0
