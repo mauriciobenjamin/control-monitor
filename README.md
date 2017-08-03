@@ -12,3 +12,4 @@ El sistema esta en uso en el Laboratorio CODICE de la CNCPC-INAH y es operativo 
 + Guardado de programaciones en la tarjeta SD
 + Generación de ciclos de actividad preprogramados
 + Incorporación de scripts opcionales para correr pruebas de funcionamiento
++ Incluir control dinámico de variables a un valor preestablecido
